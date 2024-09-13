@@ -14,6 +14,7 @@
     "type": "module",
     "dependencies": {
         "@box2d/core": "^0.10.0",
+        "@pixi/ui": "^1.1.3",
         "hammerjs": "^2.0.8",
         "howler": "^2.2.4",
         "pixi-filters": "^5.2.1",

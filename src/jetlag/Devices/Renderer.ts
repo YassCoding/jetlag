@@ -1,6 +1,6 @@
 import { Application, Container, Graphics, Sprite as PixiSprite, Text as PixiText, Filter, SCALE_MODES } from "pixi.js";
 import { stage } from "../Stage";
-import { AppearanceComponent, FilledBox, FilledCircle, FilledPolygon, FilledRoundedBox, TextSprite, ZIndex } from "../Components/Appearance";
+import { AnimatedSprite, AppearanceComponent, FilledBox, FilledCircle, FilledPolygon, FilledRoundedBox, ImageSprite, InputBox, TextSprite, VideoSprite, ZIndex } from "../Components/Appearance";
 import { RigidBodyComponent, BoxBody, CircleBody, PolygonBody } from "../Components/RigidBody";
 import { CameraService } from "../Services/Camera";
 import { Sprite } from "../Services/ImageLibrary";
@@ -90,7 +90,7 @@ class FilterableContainerSet {
    * @param asset The Pixi Graphic/Sprite to add to the container
    * @param z     The Z index of the graphic to add
    */
-  public addChild(graphic: Graphics | PixiSprite | PixiText, z: ZIndex) {
+  public addChild(graphic: Graphics | PixiSprite | PixiText | Container, z: ZIndex) {
     this.zContainers[z + 2].container.addChild(graphic);
   }
 
@@ -376,7 +376,22 @@ export class RendererDevice {
     // WARNING: This does not take into account offsets, or that the hit box can
     //          be smaller than the appearance
     if (!camera.inBounds(body.getCenter().x, body.getCenter().y, body.radius)) return;
+
     // Common fields and common appearance configuration:
+    this.drawFilledSprites(appearance, body, graphic, camera);
+
+    switch (location) {
+      case SpriteLocation.WORLD: this.worldContainers.addChild(graphic, z); break;
+      case SpriteLocation.OVERLAY: this.overlayContainers.addChild(graphic, z); break;
+      case SpriteLocation.HUD: this.hudContainers.addChild(graphic, z); break;
+    }
+
+    // Debug render?
+    if (this.debug != undefined)
+      this.debugDraw(body, camera);
+  }
+
+  private drawFilledSprites(appearance: FilledBox | FilledCircle | FilledPolygon | FilledRoundedBox, body: RigidBodyComponent, graphic: Graphics, camera: CameraService){
     let s = camera.getScale();
     let x = s * (body.getCenter().x + appearance.offset.dx - camera.getLeft());
     let y = s * (body.getCenter().y + appearance.offset.dy - camera.getTop());
@@ -424,15 +439,6 @@ export class RendererDevice {
     else {
       throw "Error: unrecognized FilledSprite?"
     }
-    switch (location) {
-      case SpriteLocation.WORLD: this.worldContainers.addChild(graphic, z); break;
-      case SpriteLocation.OVERLAY: this.overlayContainers.addChild(graphic, z); break;
-      case SpriteLocation.HUD: this.hudContainers.addChild(graphic, z); break;
-    }
-
-    // Debug render?
-    if (this.debug != undefined)
-      this.debugDraw(body, camera);
   }
 
   /**
@@ -447,22 +453,14 @@ export class RendererDevice {
    * @param location    Where is this being drawn (WORLD, OVERLAY, or HUD)?
    */
   public addBodyToFrame(appearance: AppearanceComponent, body: RigidBodyComponent, sprite: Sprite, camera: CameraService, z: ZIndex, location: SpriteLocation) {
-    // If the actor isn't on screen, skip it
+     // If the actor isn't on screen, skip it
     //
     // WARNING: This does not take into account offsets, or that the hit box can
     //          be smaller than the appearance
     if (!camera.inBounds(body.getCenter().x, body.getCenter().y, body.radius)) return;
 
-    // Compute the dimensions of the actor, in pixels
-    let s = camera.getScale();
-    let x = s * (body.getCenter().x + appearance.offset.dx - camera.getLeft());
-    let y = s * (body.getCenter().y + appearance.offset.dy - camera.getTop());
-
-    // Add the sprite
-    sprite.setAnchoredPosition(0.5, 0.5, x, y); // (.5, .5) == anchor at center
-    sprite.sprite.width = s * appearance.width;
-    sprite.sprite.height = s * appearance.height;
-    sprite.sprite.rotation = body.getRotation();
+    this.drawBodySprites(appearance, body, sprite, camera);
+    
     switch (location) {
       case SpriteLocation.WORLD: this.worldContainers.addChild(sprite.sprite, z); break;
       case SpriteLocation.OVERLAY: this.overlayContainers.addChild(sprite.sprite, z); break;
@@ -472,6 +470,111 @@ export class RendererDevice {
     // Debug render?
     if (this.debug != undefined)
       this.debugDraw(body, camera);
+  }
+
+  private drawBodySprites(appearance: AppearanceComponent, body: RigidBodyComponent, sprite: Sprite, camera: CameraService) {
+   // Compute the dimensions of the actor, in pixels
+   let s = camera.getScale();
+   let x = s * (body.getCenter().x + appearance.offset.dx - camera.getLeft());
+   let y = s * (body.getCenter().y + appearance.offset.dy - camera.getTop());
+
+   // Add the sprite
+   sprite.setAnchoredPosition(0.5, 0.5, x, y); // (.5, .5) == anchor at center
+   sprite.sprite.width = s * appearance.width;
+   sprite.sprite.height = s * appearance.height;
+   sprite.sprite.rotation = body.getRotation();
+  }
+
+  public addInputToFrame(appearance: InputBox, body: RigidBodyComponent, camera: CameraService, z: ZIndex, location: SpriteLocation){
+    // If the actor isn't on screen, skip it
+    //
+    // WARNING: This does not take into account offsets, or that the hit box can
+    //          be smaller than the appearance
+    if (!camera.inBounds(body.getCenter().x, body.getCenter().y, body.radius)) return;
+    let s = camera.getScale();
+    let x = s * (body.getCenter().x + appearance.background.offset.dx - camera.getLeft());
+    let y = s * (body.getCenter().y + appearance.background.offset.dy - camera.getTop());
+    if(appearance.background instanceof FilledBox || appearance.background instanceof FilledCircle || appearance.background instanceof FilledPolygon || appearance.background instanceof FilledRoundedBox){
+      if (appearance.background.lineWidth && appearance.background.lineColor)
+        (appearance.input.bg as Graphics).lineStyle(appearance.background.lineWidth * stage.pixelMeterRatio, appearance.background.lineColor);
+      if (appearance.background.fillColor)
+        (appearance.input.bg as Graphics).beginFill(appearance.background.fillColor);
+      if (appearance.background instanceof FilledBox) {
+        let w = s * appearance.background.width;
+        let h = s * appearance.background.height;
+        (appearance.input.bg as Graphics).drawRect(x, y, w, h);
+        (appearance.input.bg as Graphics).pivot.set(x + w / 2, y + h / 2);
+        appearance.input.position.set(x, y);
+        appearance.input.rotation = body.getRotation();
+      }
+      else if (appearance.background instanceof FilledRoundedBox) {
+        let w = s * appearance.background.width;
+        let h = s * appearance.background.height;
+        let r = s * appearance.background.radius;
+        (appearance.input.bg as Graphics).drawRoundedRect(x, y, w, h, r);
+        (appearance.input.bg as Graphics).pivot.set(x + w / 2, y + h / 2);
+        appearance.input.position.set(x, y);
+        appearance.input.rotation = body.getRotation();
+      }
+      else if (appearance.background instanceof FilledCircle) {
+        let radius = s * appearance.background.radius;
+       (appearance.input.bg as Graphics).drawCircle(x, y, radius);
+       appearance.input.position.set(x, y);
+       appearance.input.rotation = body.getRotation();
+      }
+      else if (appearance.background instanceof FilledPolygon) {
+        // For polygons, we need to translate the points (they are 0-relative in
+        // Box2d, we need them to be relative to (x,y))
+        let pts: number[] = [];
+        for (let pt of appearance.background.vertices) {
+          pts.push(s * pt.x + x);
+          pts.push(s * pt.y + y);
+        }
+        // NB: must repeat start point of polygon in PIXI
+        pts.push(pts[0]);
+        pts.push(pts[1]);
+        (appearance.input.bg as Graphics).drawPolygon(pts);
+        appearance.input.position.set(x, y);
+        appearance.input.rotation = body.getRotation();
+      }
+    }
+    else if(appearance.background instanceof VideoSprite){
+      this.drawBodySprites(appearance.background, body, appearance.background.sprite, camera);
+      // Compute the dimensions of the actor, in pixels
+      let s = camera.getScale();
+      let x = s * (body.getCenter().x + appearance.background.offset.dx - camera.getLeft());
+      let y = s * (body.getCenter().y + appearance.background.offset.dy - camera.getTop());
+
+      // Add the sprite
+      appearance.input.position.set(x, y);
+      appearance.input.rotation = body.getRotation();
+      appearance.background.sprite.sprite.width = s * appearance.background.width;
+      appearance.background.sprite.sprite.height = s * appearance.background.height;
+      appearance.input.bg = appearance.background.sprite.sprite;
+    }
+    else if(appearance.background instanceof ImageSprite){
+      this.drawBodySprites(appearance.background, body, appearance.background.image, camera);
+      appearance.input.bg = appearance.background.image.sprite;
+    }
+    else if(appearance.background instanceof AnimatedSprite){
+      this.drawBodySprites(appearance.background, body, appearance.background.getCurrent(), camera);
+      appearance.input.bg = appearance.background.getCurrent().sprite;
+    }
+    else {
+      throw "Error: unrecognized Sprite?"
+    }
+    
+    switch (location) {
+      case SpriteLocation.WORLD: this.worldContainers.addChild(appearance.input, z); break;
+      case SpriteLocation.OVERLAY: this.overlayContainers.addChild(appearance.input, z); break;
+      case SpriteLocation.HUD: this.hudContainers.addChild(appearance.input, z); break;
+    }
+
+    // Debug render?
+    if (this.debug != undefined){      
+      this.debugDraw(body, camera);
+    }
+    
   }
 
   /**

@@ -5,8 +5,9 @@ import { Actor } from "../Entities/Actor";
 import { AnimationSequence, AnimationState } from "../Config";
 import { StateEvent, IStateObserver, ActorState, DIRECTION } from "./StateManager";
 import { stage } from "../Stage";
-import { Graphics, Sprite as PixiSprite, VideoResource } from "pixi.js";
+import { Graphics, Sprite as PixiSprite, TextStyle, TextStyleFontStyle, TextStyleFontVariant, TextStyleFontWeight, VideoResource } from "pixi.js";
 import { SpriteLocation } from "../Devices/Renderer";
+import { Input, ScrollBox } from "@pixi/ui";
 
 /**
  * ZIndex is a convenience type to enforce that there are five Z indices in
@@ -346,7 +347,7 @@ export class AnimatedSprite implements IStateObserver {
    * @param opts.offset     An offset between the component's center and its
    *                        RigidBody's center (optional)
    */
-  constructor(opts: { width: number, height: number, animations: Map<AnimationState, AnimationSequence>, z?: ZIndex, remap?: Map<AnimationState, AnimationState>, offset?: { dx: number, dy: number } }) {
+  constructor(opts: { initialDir?: AnimationState, width: number, height: number, animations: Map<AnimationState, AnimationSequence>, z?: ZIndex, remap?: Map<AnimationState, AnimationState>, offset?: { dx: number, dy: number } }) {
     this.width = opts.width;
     this.height = opts.height;
     this.z = opts.z ? opts.z : 0;
@@ -367,7 +368,7 @@ export class AnimatedSprite implements IStateObserver {
       for (let k of opts.remap.keys())
         this.animations.set(k, this.animations.get(opts.remap.get(k)!)!)
 
-    this.current_ani = this.animations.get(AnimationState.IDLE_E)!;
+    this.current_ani = this.animations.get(opts.initialDir ?? AnimationState.IDLE_E)!;
     this.offset = opts.offset ?? { dx: 0, dy: 0 };
   }
 
@@ -401,6 +402,7 @@ export class AnimatedSprite implements IStateObserver {
 
   /** Return the current image for the active animation. */
   public getCurrent() { return this.current_ani.steps[this.activeFrame].cell; }
+
 
   /**
    * When the attached Actor's state changes, figure out if the animation needs
@@ -1105,6 +1107,7 @@ export class FilledPolygon {
     validateFilledConfig(this, "FilledPolygon");
   }
 
+
   /**
    * Render the FilledPolygon
    *
@@ -1138,7 +1141,149 @@ export class FilledPolygon {
   }
 }
 
+export class InputBox {
+  /** The Actor to which this InputBox is attached */
+  _actor?: Actor;
+  set actor(actor: Actor){
+    this._actor = actor;
+    this.background.actor = actor;
+  }
+  get actor(): Actor | undefined{
+    return this._actor;
+  }
+  /** The low-level graphics object that we pass to the Renderer */
+  readonly input: Input;
+  readonly background: AppearanceComponent
+  width: number;
+  height: number;
+  textFace: string
+  textSize: number
+  textStyle?: TextStyleFontStyle
+  textWeight?: TextStyleFontWeight
+  textVariant?: TextStyleFontVariant
+  textColor?: string
+  textStroke?:{color: string, thickness: number};
+  placeholder: string;
+  maxLength: number;
+  align: "left" | "center" | "right";
+  padding?: {top: number, right: number, bottom: number, left: number};
+  /** Z index of the input box: Must be in the range [-2, 2] */
+  z: ZIndex;
+  /** An offset between the input box's center and the RigidBody's center */
+  offset: { dx: number, dy: number };
+
+  constructor(opts: {background: AppearanceComponent, textFace: string, textSize: number, textStyle?: TextStyleFontStyle, textWeight?: TextStyleFontWeight, textVariant?: TextStyleFontVariant, textColor?: string, textStroke?:{color: string, thickness: number}, placeholder?: string, maxLength?: number, align?: "left" | "center" | "right", padding?: {top: number, right: number, bottom: number, left: number}, z?: ZIndex, offset?: {dx: number, dy: number}}){
+    let scale = stage.world.camera.getScale()
+    this.background = opts.background;
+    this.width = this.background.width;
+    this.height = this.background.height
+    this.textFace = opts.textFace;
+    this.textSize = opts.textSize;
+    this.textStyle = opts.textStyle ?? 'normal';
+    this.textWeight  = opts.textWeight ?? 'normal';
+    this.textVariant = opts.textVariant ?? 'normal';
+    this.textColor = opts.textColor ?? "#000000";
+    this.textStroke = opts.textStroke ?? {color: "#000000", thickness: 0};
+    this.placeholder = opts.placeholder ?? "Enter Text Here";
+    this.maxLength = opts.maxLength ?? 120;
+    this.align = opts.align ?? "left";
+    this.padding = opts.padding ?? {top: 0, left: 0, bottom: 0, right: 0};
+    this.z = opts.z ?? 0;
+    this.offset = opts.offset ?? {dx: 0, dy: 0};
+    this.input = new Input({
+      bg: new Graphics(),
+      textStyle: new TextStyle({fontFamily: this.textFace, fontSize: this.textSize * scale, fontWeight: this.textWeight, fontStyle: this.textStyle, fontVariant: this.textVariant, fill: this.textColor, stroke: this.textStroke.color, strokeThickness: this.textStroke.thickness}),
+      placeholder: this.placeholder,
+      maxLength: this.maxLength,
+      align: this.align,
+      cleanOnFocus: false,
+      padding: [this.padding.top * scale, this.padding.right * scale, this.padding.bottom * scale, this.padding.left * scale]
+    })
+  }
+
+   /**
+   * Render the InputBox
+   *
+   * @param camera      The camera for the current stage
+   * @param _elapsedMs  The time since the last render
+   * @param location    Where should this be drawn (WORLD/OVERLAY/HUD)
+   */
+   render(camera: CameraService, _elapsedMs: number, location: SpriteLocation) {
+    if (this._actor) {
+      stage.renderer.addInputToFrame(this, this._actor.rigidBody, camera, this.z, location);
+    }
+  }
+
+    /** Perform any custom updates to the input box before displaying it */
+    prerender(_elapsedMs: number) { }
+}
+
+// export class ScrollingBox{
+//     readonly scrollBox: ScrollBox;
+//     actor?: Actor;
+//     background: number;
+//     width: number;
+//     height: number;
+//     radius: number;
+//     elementMargin: number;
+//     vertPadding: number;
+//     horPadding: number;
+//     padding: number;
+//     disableCulling: boolean;
+//     globalScroll: boolean;
+//     shiftScroll: boolean;
+//     public items: Actor[][];
+
+//     constructor(opts: {width: number, height: number, background: number, radius?: number, elementMargin: number, vertPadding?: number, horPadding?:number, padding?:number, disableCulling?:boolean, globalScroll?:boolean, shiftScroll?:boolean, items: Actor[][]}){
+//       let scale = stage.world.camera.getScale();
+//       this.background = opts.background;
+//       this.width = opts.width;
+//       this.height = opts.height;
+//       this.radius = opts.radius ?? 0;
+//       this.elementMargin = opts.elementMargin;
+//       this.vertPadding = opts.vertPadding ?? 0;
+//       this.horPadding = opts.horPadding ?? 0;
+//       this.padding = opts.padding ?? 0;
+//       this.disableCulling = opts.disableCulling ?? false;
+//       this.globalScroll = opts.globalScroll ?? false;
+//       this.shiftScroll = opts.shiftScroll ?? false;
+//       this.items = opts.items
+
+//       this.scrollBox = new ScrollBox({
+//         background: this.background,
+//         width: this.width * scale,
+//         height: this.height * scale,
+//         radius: this.radius * scale,
+//         elementsMargin: this.elementMargin * scale,
+//         vertPadding: this.vertPadding * scale,
+//         horPadding: this.horPadding * scale,
+//         padding: this.padding * scale,
+//         disableDynamicRendering: this.disableCulling,
+//         globalScroll: this.globalScroll,
+//         shiftScroll: this.shiftScroll
+//       });
+//     };
+    
+
+//    /**
+//    * Render the InputBox
+//    *
+//    * @param camera      The camera for the current stage
+//    * @param _elapsedMs  The time since the last render
+//    * @param location    Where should this be drawn (WORLD/OVERLAY/HUD)
+//    */
+//    render(camera: CameraService, _elapsedMs: number, location: SpriteLocation) {
+//     if (this._actor) {
+//       stage.renderer.addInputToFrame(this, this._actor.rigidBody, camera, this.z, location);
+//   }
+// }
+
+//   /** Perform any custom updates to the polygon before displaying it */
+//   prerender(_elapsedMs: number) { }
+// }
+
+
 /**
  * AppearanceComponent is the type of anything that can be drawn to the screen.
  */
-export type AppearanceComponent = TextSprite | ImageSprite | AnimatedSprite | VideoSprite | FilledBox | FilledRoundedBox | FilledCircle | FilledPolygon;
+export type AppearanceComponent = TextSprite | ImageSprite | AnimatedSprite | VideoSprite | FilledBox | FilledRoundedBox | FilledCircle | FilledPolygon | InputBox;

@@ -1,4 +1,5 @@
 import { Actor, BoxBody, CircleBody, FilledBox, FilledCircle, FilledPolygon, GridSystem, Hero, JetLagGameConfig, KeyCodes, ManualMovement, Obstacle, PolygonBody, initializeAndLaunch, stage } from "../jetlag";
+import { InputBox, TextSprite } from "../jetlag/Components/Appearance";
 
 /**
  * Screen dimensions and other game configuration, such as the names of all
@@ -22,42 +23,14 @@ class Config implements JetLagGameConfig {
  * @param level Which level of the game should be displayed
  */
 function builder(_level: number) {
-  // Draw a grid on the screen, to help us think about the positions of actors.
-  // Remember that when `hitBoxes` is true, clicking the screen will show
-  // coordinates in the developer console.
-  GridSystem.makeGrid(stage.world, { x: 0, y: 0 }, { x: 16, y: 9 });
-
-  // Make a "hero" who moves via keyboard control and appears as a circle
-  let hero = new Actor({
-    appearance: new FilledCircle({ radius: .5, fillColor: "#ff0000", lineWidth: .04, lineColor: "#00ff00" }),
-    rigidBody: new CircleBody({ cx: 5, cy: 2, radius: .5 }),
-    role: new Hero(),
-    movement: new ManualMovement(),
-  });
-
-  // Make an obstacle that is a rectangle
-  new Actor({
-    rigidBody: new BoxBody({ cx: 3, cy: 4, width: 1, height: 1 }),
-    appearance: new FilledBox({ width: 1, height: 1, fillColor: "#ff0000", lineWidth: .04, lineColor: "#00ff00" }),
-    role: new Obstacle(),
-  });
-
-  // Make an obstacle that is a polygon
-  new Actor({
-    rigidBody: new PolygonBody({ cx: 10, cy: 5, vertices: [0, -.5, .5, 0, 0, .5, -1, 0] }),
-    appearance: new FilledPolygon({ vertices: [0, -.5, .5, 0, 0, .5, -1, 0], fillColor: "#ff0000", lineWidth: .04, lineColor: "#00ff00" }),
-    role: new Obstacle(),
-  });
-
-  // Pressing a key will change the hero's velocity
-  stage.keyboard.setKeyUpHandler(KeyCodes.KEY_UP, () => (hero.movement as ManualMovement).updateYVelocity(0));
-  stage.keyboard.setKeyUpHandler(KeyCodes.KEY_DOWN, () => (hero.movement as ManualMovement).updateYVelocity(0));
-  stage.keyboard.setKeyUpHandler(KeyCodes.KEY_LEFT, () => (hero.movement as ManualMovement).updateXVelocity(0));
-  stage.keyboard.setKeyUpHandler(KeyCodes.KEY_RIGHT, () => (hero.movement as ManualMovement).updateXVelocity(0));
-  stage.keyboard.setKeyDownHandler(KeyCodes.KEY_UP, () => (hero.movement as ManualMovement).updateYVelocity(-5));
-  stage.keyboard.setKeyDownHandler(KeyCodes.KEY_DOWN, () => (hero.movement as ManualMovement).updateYVelocity(5));
-  stage.keyboard.setKeyDownHandler(KeyCodes.KEY_LEFT, () => (hero.movement as ManualMovement).updateXVelocity(-5));
-  stage.keyboard.setKeyDownHandler(KeyCodes.KEY_RIGHT, () => (hero.movement as ManualMovement).updateXVelocity(5));
+  let z = new Actor({
+        appearance: new InputBox({background: new FilledBox({width:10, height: 4, fillColor: "#000000"}),textFace: "Arial", align: "right", textColor: "#FF0000",textSize: 1, placeholder:"Text ehre", maxLength: 100, }),
+        rigidBody: new BoxBody({width: 10, height: 4, cx: 8, cy: 4.5})
+      });
+      let fps = new Actor({
+        appearance: new TextSprite({center:true, face: "Arial", color:"#000000", size: 50}, () => "FPS: " + stage.renderer.getFPS().toString()),
+        rigidBody: new BoxBody({width: 10, height: 4, cx: 4, cy: 1})
+      })
 }
 
 // call the function that starts running the game in the `game-player` div tag
